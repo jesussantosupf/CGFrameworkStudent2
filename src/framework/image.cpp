@@ -309,19 +309,197 @@ bool Image::SaveTGA(const char* filename)
 	return true;
 }
 
-void Image::DrawRect(int x, int y, int w, int h, const Color& c)
+void Image::DrawRect(int x, int y, int w, int h, const Color& c, bool fill)
 {
-
-	for (int i = 0; i < w; ++i) {
-		SetPixelUnsafe(x + i, y, c);
-		SetPixelUnsafe(x + i, y + h - 1, c);
+	if (fill) {
+		// Dibujar un rectangulo completamente relleno
+		for (int i = 0; i < w; ++i) {
+			for (int j = 0; j < h; ++j) {
+				SetPixelUnsafe(x + i, y + j, c);
+			}
+		}
 	}
+	else {
+		for (int i = 0; i < w; ++i) {
+			SetPixelUnsafe(x + i, y, c);             // Top edge
+			SetPixelUnsafe(x + i, y + h - 1, c);     // Bottom edge
+		}
 
-	for (int j = 0; j < h; ++j) {
-		SetPixelUnsafe(x, y + j, c);
-		SetPixelUnsafe(x + w - 1, y + j, c);
+		for (int j = 0; j < h; ++j) {
+			SetPixelUnsafe(x, y + j, c);             // Left edge
+			SetPixelUnsafe(x + w - 1, y + j, c);     // Right edge
+		}
 	}
 }
+
+void Image::DrawLineDDA(int x0, int y0, int x1, int y1, const Color& c) {
+	int dx = x1 - x0;
+	int dy = y1 - y0;
+
+	int steps = std::max(abs(dx), abs(dy)); // Calcula el numero de pasos necesarios
+	float xIncrement = dx / (float)steps;  // Incremento en X por cada paso
+	float yIncrement = dy / (float)steps;  // Incremento en Y por cada paso
+
+	float x = x0;
+	float y = y0;
+
+	for (int i = 0; i <= steps; ++i) {
+		SetPixel(std::round(x), std::round(y), c); // Dibuja el pixel
+		x += xIncrement; // Incrementa X
+		y += yIncrement; // Incrementa Y
+	}
+}
+
+
+
+
+// Dijo de que probemos cosas, que juguemos con el framework. En plan darle a un boton y que pueda cambiar de color el triangulo y cosas asi.
+
+
+void Image::DrawTriangle(const Vector2& p0, const Vector2& p1, const Vector2& p2,
+	const Color& borderColor, bool isFilled, const Color& fillColor) {
+	// Crear la tabla de bordes activos (AET)
+	std::vector<Cell> table(height);
+
+	// Escanear los bordes del triangulo
+	ScanLineDDA(p0.x, p0.y, p1.x, p1.y, table);
+	ScanLineDDA(p1.x, p1.y, p2.x, p2.y, table);
+	ScanLineDDA(p2.x, p2.y, p0.x, p0.y, table);
+
+	// Dibujar bordes si no se debe rellenar
+	if (!isFilled) {
+		DrawLineDDA(p0.x, p0.y, p1.x, p1.y, borderColor);
+		DrawLineDDA(p1.x, p1.y, p2.x, p2.y, borderColor);
+		DrawLineDDA(p2.x, p2.y, p0.x, p0.y, borderColor);
+		return;
+	}
+
+	// Rellenar el triangulo
+	for (int y = 0; y < table.size(); ++y) {
+		if (table[y].minx <= table[y].maxx) {
+			for (int x = table[y].minx; x <= table[y].maxx; ++x) {
+				SetPixel(x, y, fillColor);
+			}
+		}
+	}
+}
+
+
+void Image::ScanLineDDA(int x0, int y0, int x1, int y1, std::vector<Cell>& table) {
+	// Calcula el desplazamiento y el numero de pasos
+	float dx = x1 - x0;
+	float dy = y1 - y0;
+	float steps = std::max(std::abs(dx), std::abs(dy));
+	float xInc = dx / steps;
+	float yInc = dy / steps;
+
+	float x = x0, y = y0;
+
+	// Recorre la linea pixel por pixel
+	for (int i = 0; i <= steps; ++i) {
+		int row = static_cast<int>(std::round(y));
+		if (row >= 0 && row < table.size()) {
+			table[row].minx = std::min(table[row].minx, static_cast<int>(std::round(x)));
+			table[row].maxx = std::max(table[row].maxx, static_cast<int>(std::round(x)));
+		}
+		x += xInc;
+		y += yInc;
+	}
+}
+
+
+
+void Image::DrawCircle(int centerX, int centerY, int radius, const Color& borderColor, int borderWidth, bool isFilled, const Color& fillColor) {
+	int x = 0;
+	int y = radius;
+	int d = 1 - radius; // Funcion de decision inicial del algoritmo del punto medio
+
+	// Funcion lambda para dibujar puntos simetricos
+	auto drawSymmetricPoints = [&](int cx, int cy, int x, int y, const Color& color) {
+		SetPixel(cx + x, cy + y, color);
+		SetPixel(cx - x, cy + y, color);
+		SetPixel(cx + x, cy - y, color);
+		SetPixel(cx - x, cy - y, color);
+		SetPixel(cx + y, cy + x, color);
+		SetPixel(cx - y, cy + x, color);
+		SetPixel(cx + y, cy - x, color);
+		SetPixel(cx - y, cy - x, color);
+		};
+
+	// Dibuja el contorno del circulo
+	while (x <= y) {
+		drawSymmetricPoints(centerX, centerY, x, y, borderColor);
+		if (d < 0) {
+			d += 2 * x + 3;
+		}
+		else {
+			d += 2 * (x - y) + 5;
+			y--;
+		}
+		x++;
+	}
+
+	// Rellenar el circulo si es necesario
+	if (isFilled) {
+		for (int i = -radius; i <= radius; i++) {
+			for (int j = -radius; j <= radius; j++) {
+				if (i * i + j * j <= radius * radius) { // Comprobar si el punto esta dentro del circulo
+					SetPixel(centerX + i, centerY + j, fillColor);
+				}
+			}
+		}
+	}
+}
+
+
+void Image::DrawImage(const Image& image, int x, int y) {
+	for (int i = 0; i < image.width; ++i) {
+		for (int j = 0; j < image.height; ++j) {
+			Color pixel = image.GetPixel(i, j);
+
+			// Simplemente dibuja todos los pixeles sin verificar transparencia
+			SetPixel(x + i, y + j, pixel);
+		}
+	}
+}
+
+void ParticleSystem::Init() {
+	for (int i = 0; i < MAX_PARTICLES; ++i) {
+		particles[i].position = Vector2(rand() % 800, rand() % 600); // Posicion aleatoria
+		particles[i].velocity = Vector2(((rand() % 200 - 100) / 100.0f), ((rand() % 200 - 100) / 100.0f)); // Velocidad aleatoria
+		particles[i].color = Color(rand() % 256, rand() % 256, rand() % 256); // Color aleatorio
+		particles[i].acceleration = 0.0f; // Sin aceleracion
+		particles[i].ttl = 3.0f + (rand() % 100) / 50.0f; // Vida entre 3 y 5 segundos
+		particles[i].inactive = false;
+	}
+}
+
+void ParticleSystem::Render(Image* framebuffer) {
+	for (int i = 0; i < MAX_PARTICLES; ++i) {
+		if (!particles[i].inactive) {
+			framebuffer->SetPixel(static_cast<int>(particles[i].position.x),
+				static_cast<int>(particles[i].position.y),
+				particles[i].color);
+		}
+	}
+}
+
+void ParticleSystem::Update(float dt, Image* framebuffer) {
+	for (int i = 0; i < MAX_PARTICLES; ++i) {
+		if (!particles[i].inactive) {
+			particles[i].position.x += particles[i].velocity.x * dt * 100;
+			particles[i].position.y += particles[i].velocity.y * dt * 100;
+
+			particles[i].ttl -= dt;
+			if (particles[i].ttl <= 0 || particles[i].position.x < 0 || particles[i].position.y < 0 ||
+				particles[i].position.x >= framebuffer->width || particles[i].position.y >= framebuffer->height) {
+				particles[i].inactive = true;
+			}
+		}
+	}
+}
+
+
 
 #ifndef IGNORE_LAMBDAS
 

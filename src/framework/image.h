@@ -19,6 +19,12 @@
 class FloatImage;
 class Entity;
 class Camera;
+class Button;
+struct Cell {
+	int minx = INT_MAX; // Valor inicial maximo para encontrar el minimo
+	int maxx = INT_MIN; // Valor inicial minimo para encontrar el maximo
+};
+
 
 // A matrix of pixels
 class Image
@@ -30,6 +36,7 @@ class Image
 		unsigned int bpp; // Bits per pixel
 		unsigned char* data; // Bytes with the pixel information
 	} TGAInfo;
+
 
 public:
 	unsigned int width;
@@ -78,7 +85,16 @@ public:
 	bool LoadTGA(const char* filename, bool flip_y = false);
 	bool SaveTGA(const char* filename);
 
-	void DrawRect(int x, int y, int w, int h, const Color& c);
+	void DrawRect(int x, int y, int w, int h, const Color& c, bool fill = false);
+	void DrawLineDDA(int x0, int y0, int x1, int y1, const Color& c);
+
+	void DrawTriangle(const Vector2& p0, const Vector2& p1, const Vector2& p2, const Color& borderColor, bool isFilled, const Color& fillColor);
+	void ScanLineDDA(int x0, int y0, int x1, int y1, std::vector<Cell>& table);
+
+	void DrawCircle(int x, int y, int r, const Color& borderColor, int borderWidth, bool isFilled, const Color& fillColor);
+
+	void DrawImage(const Image& image, int x, int y);
+
 
 	// Used to easy code
 	#ifndef IGNORE_LAMBDAS
@@ -125,4 +141,57 @@ public:
 	inline void SetPixelUnsafe(unsigned int x, unsigned int y, const float& v) { pixels[y * width + x] = v; }
 
 	void Resize(unsigned int width, unsigned int height);
+};
+
+
+
+// Clase Button para manejar botones en la barra de herramientas
+class Button {
+public:
+	Image icon;          // Imagen que representa el boton
+	Vector2 position;    // Posicion del boton en pantalla
+	int width, height;   // Dimensiones del boton
+
+	// Constructor
+	Button(const std::string& iconPath, Vector2 pos, int w, int h)
+		: position(pos), width(w), height(h) {
+		// Ajusta la ruta relativa si es necesario
+		std::string adjustedPath = "../" + iconPath; // "../" para salir de `build/Debug`
+
+		// Carga la imagen como PNG
+		if (!icon.LoadPNG(adjustedPath.c_str())) {
+			std::cerr << "Error: No se pudo cargar el archivo " << adjustedPath << std::endl;
+		}
+	}
+
+	// Verifica si el raton esta dentro del boton
+	bool IsMouseInside(Vector2 mousePosition) const {
+		return (mousePosition.x >= position.x && mousePosition.x <= position.x + width &&
+			mousePosition.y >= position.y && mousePosition.y <= position.y + height);
+	}
+
+	// Dibuja el boton en el framebuffer
+	void Render(Image& framebuffer) const {
+		framebuffer.DrawImage(icon, position.x, position.y);
+	}
+};
+
+class ParticleSystem {
+	static const int MAX_PARTICLES = 100;
+
+	struct Particle {
+		Vector2 position;
+		Vector2 velocity;
+		Color color;
+		float acceleration;
+		float ttl;
+		bool inactive;
+	};
+
+	Particle particles[MAX_PARTICLES];
+
+public:
+	void Init();
+	void Render(Image* framebuffer);
+	void Update(float dt, Image* framebuffer);
 };
